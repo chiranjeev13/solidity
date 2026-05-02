@@ -62,6 +62,13 @@ bool EVMVersion::hasOpcode(Instruction _opcode) const
 	case Instruction::TSTORE:
 	case Instruction::TLOAD:
 		return supportsTransientStorage();
+	// EIP-8141 opcodes
+	case Instruction::APPROVE:
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEDATALOAD:
+	case Instruction::FRAMEDATACOPY:
+	case Instruction::FRAMEPARAM:
+		return hasEIP8141Opcodes();
 	default:
 		return true;
 	}

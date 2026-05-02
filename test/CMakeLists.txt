@@ -53,6 +53,7 @@ detect_stray_source_files("${libsolutil_sources}" "libsolutil/")
 
 set(libevmasm_sources
     libevmasm/Assembler.cpp
+    libevmasm/EIP8141.cpp
     libevmasm/EVMAssemblyTest.cpp
     libevmasm/EVMAssemblyTest.h
     libevmasm/Optimiser.cpp

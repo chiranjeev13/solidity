@@ -185,6 +185,12 @@ enum class Instruction: uint8_t
 	LOG3,                     ///< Makes a log entry; 3 topics.
 	LOG4,                     ///< Makes a log entry; 4 topics.
 
+	APPROVE = 0xaa,           ///< EIP-8141: approve transaction parameters (offset, length, scope)
+	TXPARAM = 0xb0,           ///< EIP-8141: get transaction parameter (param → value)
+	FRAMEDATALOAD = 0xb1,     ///< EIP-8141: load data from call frame (offset, frameIndex → data)
+	FRAMEDATACOPY = 0xb2,     ///< EIP-8141: copy frame data to memory (memOffset, dataOffset, length, frameIndex)
+	FRAMEPARAM = 0xb3,        ///< EIP-8141: get frame parameter (param, frameIndex → value)
+
 	CREATE = 0xf0,            ///< create a new account with associated code
 	CALL,                     ///< message-call into an account
 	CALLCODE,                 ///< message-call with another account's code only

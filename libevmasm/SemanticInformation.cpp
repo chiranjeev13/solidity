@@ -85,6 +85,7 @@ std::vector<SemanticInformation::Operation> SemanticInformation::readWriteOperat
 	case Instruction::LOG2:
 	case Instruction::LOG3:
 	case Instruction::LOG4:
+	case Instruction::APPROVE:
 	{
 		assertThrow(storage(_instruction) == Effect::None, OptimizerException, "");
 		assertThrow(memory(_instruction) == Effect::Read, OptimizerException, "");
@@ -111,6 +112,7 @@ std::vector<SemanticInformation::Operation> SemanticInformation::readWriteOperat
 	case Instruction::CODECOPY:
 	case Instruction::CALLDATACOPY:
 	case Instruction::RETURNDATACOPY:
+	case Instruction::FRAMEDATACOPY:
 	{
 		assertThrow(memory(_instruction) == Effect::Write, OptimizerException, "");
 		assertThrow(storage(_instruction) == Effect::None, OptimizerException, "");
@@ -291,6 +293,7 @@ bool SemanticInformation::altersControlFlow(AssemblyItem const& _item)
 	case Instruction::STOP:
 	case Instruction::INVALID:
 	case Instruction::REVERT:
+	case Instruction::APPROVE:
 		return true;
 	default:
 		return false;
@@ -313,6 +316,7 @@ bool SemanticInformation::terminatesControlFlow(Instruction _instruction)
 	case Instruction::STOP:
 	case Instruction::INVALID:
 	case Instruction::REVERT:
+	case Instruction::APPROVE:
 		return true;
 	default:
 		return false;
@@ -434,6 +438,7 @@ SemanticInformation::Effect SemanticInformation::memory(Instruction _instruction
 	case Instruction::CALLCODE:
 	case Instruction::DELEGATECALL:
 	case Instruction::STATICCALL:
+	case Instruction::FRAMEDATACOPY:
 		return SemanticInformation::Write;
 
 	case Instruction::CREATE:
@@ -448,6 +453,7 @@ SemanticInformation::Effect SemanticInformation::memory(Instruction _instruction
 	case Instruction::LOG2:
 	case Instruction::LOG3:
 	case Instruction::LOG4:
+	case Instruction::APPROVE:
 		return SemanticInformation::Read;
 
 	default:
@@ -528,6 +534,7 @@ SemanticInformation::Effect SemanticInformation::otherState(Instruction _instruc
 	case Instruction::CREATE2:
 	case Instruction::SELFDESTRUCT:
 	case Instruction::STATICCALL: // because it can affect returndatasize
+	case Instruction::APPROVE: // mutates transaction-scoped approval state, sender nonce, and balance
 		// Strictly speaking, log0, .., log4 writes to the state, but the EVM cannot read it, so they
 		// are just marked as having 'other side effects.'
 		return SemanticInformation::Write;
@@ -577,6 +584,10 @@ bool SemanticInformation::invalidInPureFunctions(Instruction _instruction)
 	case Instruction::STATICCALL:
 	case Instruction::SLOAD:
 	case Instruction::TLOAD:
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEPARAM:
+	case Instruction::FRAMEDATALOAD:
+	case Instruction::FRAMEDATACOPY:
 		return true;
 	default:
 		break;
@@ -603,6 +614,7 @@ bool SemanticInformation::invalidInViewFunctions(Instruction _instruction)
 	case Instruction::DELEGATECALL:
 	case Instruction::CREATE2:
 	case Instruction::SELFDESTRUCT:
+	case Instruction::APPROVE:
 		return true;
 	default:
 		break;

@@ -491,6 +491,12 @@ u256 EVMInstructionInterpreter::eval(
 	case Instruction::SWAP15:
 	case Instruction::SWAP16:
 		yulAssert(false, "Impossible in strict assembly.");
+	case Instruction::APPROVE:
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEDATALOAD:
+	case Instruction::FRAMEDATACOPY:
+	case Instruction::FRAMEPARAM:
+		solUnimplemented("EIP-8141 not yet supported by Yul interpreter.");
 	}
 
 	util::unreachable();
