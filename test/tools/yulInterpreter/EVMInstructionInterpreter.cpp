@@ -503,6 +503,12 @@ u256 EVMInstructionInterpreter::eval(
 	case Instruction::EXTSTATICCALL:
 	case Instruction::EXTDELEGATECALL:
 		solUnimplemented("EOF not yet supported by Yul interpreter.");
+	case Instruction::APPROVE:
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEDATALOAD:
+	case Instruction::FRAMEDATACOPY:
+	case Instruction::FRAMEPARAM:
+		solUnimplemented("EIP-8141 not yet supported by Yul interpreter.");
 	}
 
 	util::unreachable();

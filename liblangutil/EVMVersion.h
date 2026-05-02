@@ -66,6 +66,16 @@ public:
 	static EVMVersion constexpr osaka() { return {Version::Osaka}; }
 	static EVMVersion constexpr future() { return {Version::Future}; }
 
+	/// Returns a copy of this version with the EIP-8141 (Frame Transaction) opcodes enabled.
+	/// EIP-8141 is a draft EIP not yet assigned to any hardfork, so it is exposed as an
+	/// orthogonal opt-in flag rather than a point in the hardfork ordering.
+	constexpr EVMVersion withEIP8141() const noexcept
+	{
+		EVMVersion copy = *this;
+		copy.m_eip8141Enabled = true;
+		return copy;
+	}
+
 	static auto constexpr allVersions() {
 		return std::array{
 			homestead(),
@@ -96,9 +106,17 @@ public:
 
 	static std::optional<EVMVersion> fromString(std::string const& _version)
 	{
+		std::string base = _version;
+		bool eip8141 = false;
+		std::string const suffix = "+eip8141";
+		if (base.size() > suffix.size() && base.compare(base.size() - suffix.size(), suffix.size(), suffix) == 0)
+		{
+			base.resize(base.size() - suffix.size());
+			eip8141 = true;
+		}
 		for (auto const& v: allVersions())
-			if (_version == v.name())
-				return v;
+			if (base == v.name())
+				return eip8141 ? v.withEIP8141() : v;
 		return std::nullopt;
 	}
 
@@ -113,25 +131,30 @@ public:
 
 	std::string name() const
 	{
+		std::string base;
 		switch (m_version)
 		{
-		case Version::Homestead: return "homestead";
-		case Version::TangerineWhistle: return "tangerineWhistle";
-		case Version::SpuriousDragon: return "spuriousDragon";
-		case Version::Byzantium: return "byzantium";
-		case Version::Constantinople: return "constantinople";
-		case Version::Petersburg: return "petersburg";
-		case Version::Istanbul: return "istanbul";
-		case Version::Berlin: return "berlin";
-		case Version::London: return "london";
-		case Version::Paris: return "paris";
-		case Version::Shanghai: return "shanghai";
-		case Version::Cancun: return "cancun";
-		case Version::Prague: return "prague";
-		case Version::Osaka: return "osaka";
-		case Version::Future: return "@future";
+		case Version::Homestead: base = "homestead"; break;
+		case Version::TangerineWhistle: base = "tangerineWhistle"; break;
+		case Version::SpuriousDragon: base = "spuriousDragon"; break;
+		case Version::Byzantium: base = "byzantium"; break;
+		case Version::Constantinople: base = "constantinople"; break;
+		case Version::Petersburg: base = "petersburg"; break;
+		case Version::Istanbul: base = "istanbul"; break;
+		case Version::Berlin: base = "berlin"; break;
+		case Version::London: base = "london"; break;
+		case Version::Paris: base = "paris"; break;
+		case Version::Shanghai: base = "shanghai"; break;
+		case Version::Cancun: base = "cancun"; break;
+		case Version::Prague: base = "prague"; break;
+		case Version::Osaka: base = "osaka"; break;
+		case Version::Future: base = "@future"; break;
 		}
-		util::unreachable();
+		if (base.empty())
+			util::unreachable();
+		if (m_eip8141Enabled)
+			base += "+eip8141";
+		return base;
 	}
 
 	/// Has the RETURNDATACOPY and RETURNDATASIZE opcodes.
@@ -151,6 +174,7 @@ public:
 	bool hasMcopy() const { return *this >= cancun(); }
 	bool supportsTransientStorage() const { return *this >= cancun(); }
 	bool supportsEOF() const { return *this >= firstWithEOF(); }
+	bool hasEIP8141Opcodes() const { return m_eip8141Enabled; }
 	constexpr size_t reachableStackDepth() const { return 16; }
 
 	bool hasOpcode(evmasm::Instruction _opcode, std::optional<uint8_t> _eofVersion) const;
@@ -182,6 +206,7 @@ private:
 	constexpr EVMVersion(Version _version): m_version(_version) {}
 
 	Version m_version = currentVersion;
+	bool m_eip8141Enabled = false;
 };
 
 }

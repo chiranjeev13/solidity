@@ -63,6 +63,13 @@ bool EVMVersion::hasOpcode(Instruction _opcode, std::optional<uint8_t> _eofVersi
 	case Instruction::TSTORE:
 	case Instruction::TLOAD:
 		return supportsTransientStorage();
+	// EIP-8141 opcodes
+	case Instruction::APPROVE:
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEDATALOAD:
+	case Instruction::FRAMEDATACOPY:
+	case Instruction::FRAMEPARAM:
+		return hasEIP8141Opcodes();
 	// Instructions below are deprecated in EOF
 	case Instruction::CALL:
 	case Instruction::CALLCODE:
