@@ -164,6 +164,8 @@ void UnusedStoreEliminator::visit(Statement const& _statement)
 		*instruction == Instruction::CODECOPY ||
 		*instruction == Instruction::CALLDATACOPY ||
 		*instruction == Instruction::RETURNDATACOPY ||
+		*instruction == Instruction::FRAMEDATACOPY ||
+		*instruction == Instruction::SIGDATACOPY ||
 		// TODO: Removing MCOPY is complicated because it's not just a store but also a load.
 		//*instruction == Instruction::MCOPY ||
 		*instruction == Instruction::MSTORE ||
@@ -200,6 +202,14 @@ void UnusedStoreEliminator::visit(Statement const& _statement)
 			if (!allowReturndatacopyToBeRemoved)
 				return;
 		}
+		if (
+			*instruction == Instruction::FRAMEDATACOPY ||
+			*instruction == Instruction::SIGDATACOPY
+		)
+			// EIP-8141: an out-of-bounds frame or signature index halts execution exceptionally,
+			// as does a signature entry whose scheme is not ARBITRARY, so unlike calldatacopy
+			// these are not guaranteed to succeed and must never be removed.
+			return;
 		m_allStores.insert(&_statement);
 		std::vector<Operation> operations = operationsFromFunctionCall(*funCall);
 		yulAssert(operations.size() == 1, "");

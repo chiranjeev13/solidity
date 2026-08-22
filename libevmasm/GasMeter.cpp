@@ -81,6 +81,9 @@ GasMeter::GasConsumption GasMeter::estimateMax(AssemblyItem const& _item, bool _
 			break;
 		case Instruction::RETURN:
 		case Instruction::REVERT:
+		// EIP-8141: APPROVE has no base execution-gas cost and charges only the memory expansion
+		// for the return-data region it designates, matching RETURN.
+		case Instruction::APPROVE:
 			gas = runGas(_item.instruction(), m_evmVersion);
 			gas += memoryGas(0, -1);
 			break;
@@ -108,6 +111,7 @@ GasMeter::GasConsumption GasMeter::estimateMax(AssemblyItem const& _item, bool _
 		case Instruction::CODECOPY:
 		case Instruction::RETURNDATACOPY:
 		case Instruction::FRAMEDATACOPY:
+		case Instruction::SIGDATACOPY:
 			gas = runGas(_item.instruction(), m_evmVersion);
 			gas += memoryGas(0, -2);
 			gas += wordGas(GasCosts::copyGas, m_state->relativeStackElement(-2));

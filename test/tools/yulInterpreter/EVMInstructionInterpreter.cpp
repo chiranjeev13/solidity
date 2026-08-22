@@ -508,6 +508,8 @@ u256 EVMInstructionInterpreter::eval(
 	case Instruction::FRAMEDATALOAD:
 	case Instruction::FRAMEDATACOPY:
 	case Instruction::FRAMEPARAM:
+	case Instruction::SIGPARAM:
+	case Instruction::SIGDATACOPY:
 		solUnimplemented("EIP-8141 not yet supported by Yul interpreter.");
 	}
 

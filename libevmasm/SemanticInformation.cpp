@@ -113,6 +113,7 @@ std::vector<SemanticInformation::Operation> SemanticInformation::readWriteOperat
 	case Instruction::CALLDATACOPY:
 	case Instruction::RETURNDATACOPY:
 	case Instruction::FRAMEDATACOPY:
+	case Instruction::SIGDATACOPY:
 	{
 		assertThrow(memory(_instruction) == Effect::Write, OptimizerException, "");
 		assertThrow(storage(_instruction) == Effect::None, OptimizerException, "");
@@ -438,6 +439,8 @@ bool SemanticInformation::isDeterministic(AssemblyItem const& _item)
 	case Instruction::MSIZE: // depends on previous writes and reads, not only on content
 	case Instruction::BALANCE: // depends on previous calls
 	case Instruction::SELFBALANCE: // depends on previous calls
+	case Instruction::TXPARAM: // depends on previous state growth (state_gas_left)
+	case Instruction::FRAMEPARAM: // depends on previous state growth and refills (gas_used)
 	case Instruction::EXTCODESIZE:
 	case Instruction::EXTCODEHASH:
 	case Instruction::RETURNDATACOPY: // depends on previous calls
@@ -472,6 +475,8 @@ bool SemanticInformation::movable(Instruction _instruction)
 	case Instruction::PC:
 	case Instruction::MSIZE:
 	case Instruction::GAS:
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEPARAM:
 		return false;
 	default:
 		return true;
@@ -511,6 +516,7 @@ SemanticInformation::Effect SemanticInformation::memory(Instruction _instruction
 	case Instruction::DELEGATECALL:
 	case Instruction::STATICCALL:
 	case Instruction::FRAMEDATACOPY:
+	case Instruction::SIGDATACOPY:
 		return SemanticInformation::Write;
 
 	case Instruction::CREATE:
@@ -638,6 +644,10 @@ SemanticInformation::Effect SemanticInformation::otherState(Instruction _instruc
 	case Instruction::SELFBALANCE:
 	case Instruction::RETURNDATACOPY:
 	case Instruction::EXTCODECOPY:
+	// EIP-8141: these report gas counters that state growth and cross-frame refills mutate.
+	// The other introspection opcodes only read the immutable transaction payload.
+	case Instruction::TXPARAM:
+	case Instruction::FRAMEPARAM:
 		// PC and GAS are specifically excluded here. Instructions such as CALLER, CALLVALUE,
 		// ADDRESS are excluded because they cannot change during execution.
 		return SemanticInformation::Read;
@@ -680,6 +690,8 @@ bool SemanticInformation::invalidInPureFunctions(Instruction _instruction)
 	case Instruction::FRAMEPARAM:
 	case Instruction::FRAMEDATALOAD:
 	case Instruction::FRAMEDATACOPY:
+	case Instruction::SIGPARAM:
+	case Instruction::SIGDATACOPY:
 		return true;
 	default:
 		break;

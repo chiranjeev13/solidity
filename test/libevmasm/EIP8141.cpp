@@ -17,18 +17,21 @@
 // SPDX-License-Identifier: GPL-3.0
 /**
  * Tests covering the EIP-8141 (Frame Transaction) opcode wiring:
- * APPROVE, TXPARAM, FRAMEDATALOAD, FRAMEDATACOPY, FRAMEPARAM.
+ * APPROVE, TXPARAM, FRAMEDATALOAD, FRAMEDATACOPY, FRAMEPARAM, SIGPARAM, SIGDATACOPY.
  */
 
 #include <libevmasm/AssemblyItem.h>
 #include <libevmasm/GasMeter.h>
 #include <libevmasm/Instruction.h>
+#include <libevmasm/KnownState.h>
 #include <libevmasm/SemanticInformation.h>
 #include <liblangutil/EVMVersion.h>
 
 #include <boost/test/unit_test.hpp>
 
 #include <array>
+#include <memory>
+#include <vector>
 
 using namespace solidity::langutil;
 using namespace solidity::evmasm;
@@ -49,13 +52,35 @@ namespace
 		Tier tier;
 	};
 
-	std::array<OpcodeSpec, 5> const c_eip8141Opcodes = {{
-		{Instruction::APPROVE,       "APPROVE",       0xaa, 3, 0, true,  Tier::Special},
+	std::array<OpcodeSpec, 7> const c_eip8141Opcodes = {{
+		{Instruction::APPROVE,       "APPROVE",       0xaa, 3, 0, true,  Tier::Zero},
 		{Instruction::TXPARAM,       "TXPARAM",       0xb0, 1, 1, false, Tier::Base},
 		{Instruction::FRAMEDATALOAD, "FRAMEDATALOAD", 0xb1, 2, 1, false, Tier::VeryLow},
 		{Instruction::FRAMEDATACOPY, "FRAMEDATACOPY", 0xb2, 4, 0, true,  Tier::VeryLow},
 		{Instruction::FRAMEPARAM,    "FRAMEPARAM",    0xb3, 2, 1, false, Tier::Base},
+		{Instruction::SIGPARAM,      "SIGPARAM",      0xb4, 2, 1, false, Tier::Base},
+		{Instruction::SIGDATACOPY,   "SIGDATACOPY",   0xb5, 4, 0, true,  Tier::VeryLow},
 	}};
+	/// Meters @a _instruction on a fresh gas meter after pushing @a _operands, bottom-most operand
+	/// first, and returns the total cost including the pushes. The items are kept alive for the
+	/// whole metering because KnownState stores pointers to the items it is fed.
+	GasMeter::GasConsumption instructionGas(
+		std::vector<u256> const& _operands,
+		Instruction _instruction,
+		EVMVersion _version
+	)
+	{
+		AssemblyItems items;
+		for (u256 const& operand: _operands)
+			items.emplace_back(operand);
+		items.emplace_back(_instruction);
+
+		GasMeter meter(std::make_shared<KnownState>(), _version);
+		GasMeter::GasConsumption gas;
+		for (AssemblyItem const& item: items)
+			gas += meter.estimateMax(item);
+		return gas;
+	}
 }
 
 BOOST_AUTO_TEST_SUITE(EIP8141)
@@ -174,13 +199,87 @@ BOOST_AUTO_TEST_CASE(flag_does_not_appear_in_all_versions)
 
 BOOST_AUTO_TEST_CASE(static_gas_costs_match_spec)
 {
-	// EIP-8141 spec: TXPARAM = 2, FRAMEPARAM = 2 (Base tier), FRAMEDATALOAD = 3 (VeryLow).
+	// EIP-8141 spec: TXPARAM = 2, FRAMEPARAM = 2, SIGPARAM = 2 (Base tier),
+	// FRAMEDATALOAD = 3 (VeryLow).
 	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::TXPARAM, EVMVersion::osaka().withEIP8141()), 2);
 	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::FRAMEPARAM, EVMVersion::osaka().withEIP8141()), 2);
+	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::SIGPARAM, EVMVersion::osaka().withEIP8141()), 2);
 	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::FRAMEDATALOAD, EVMVersion::osaka().withEIP8141()), 3);
-	// FRAMEDATACOPY static portion is 3; the dynamic portion (per-word + memory expansion) is
-	// covered separately in GasMeter::estimateMax — see framedatacopy_dynamic_gas below.
+	// The copy instructions' static portion is 3; the dynamic portion (per-word + memory
+	// expansion) is covered by copy_instructions_priced_like_calldatacopy below.
 	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::FRAMEDATACOPY, EVMVersion::osaka().withEIP8141()), 3);
+	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::SIGDATACOPY, EVMVersion::osaka().withEIP8141()), 3);
+}
+
+BOOST_AUTO_TEST_CASE(copy_instructions_priced_like_calldatacopy)
+{
+	// The spec prices FRAMEDATACOPY and SIGDATACOPY exactly as CALLDATACOPY: the fixed cost of 3,
+	// the per-word copy cost and the standard memory expansion cost.
+	// Operands bottom-up: the frame or signature index, then length, dataOffset and memOffset on
+	// top. CALLDATACOPY reads the same three top-most operands, so it can be metered with the
+	// identical sequence and used as the reference.
+	std::vector<u256> const operands{u256(3), u256(64), u256(0), u256(128)};
+	EVMVersion const version = EVMVersion::osaka().withEIP8141();
+	GasMeter::GasConsumption const reference = instructionGas(operands, Instruction::CALLDATACOPY, version);
+	BOOST_REQUIRE(!reference.isInfinite);
+	for (auto instruction: {Instruction::FRAMEDATACOPY, Instruction::SIGDATACOPY})
+	{
+		GasMeter::GasConsumption const gas = instructionGas(operands, instruction, version);
+		BOOST_CHECK_MESSAGE(!gas.isInfinite, instructionInfo(instruction, version).name + " has unbounded gas cost");
+		BOOST_CHECK_EQUAL(gas.value, reference.value);
+	}
+}
+
+BOOST_AUTO_TEST_CASE(approve_priced_like_return)
+{
+	// The spec gives APPROVE no base execution-gas cost: it charges only the memory expansion for
+	// the return-data region [offset, offset + length), exactly as RETURN does.
+	EVMVersion const version = EVMVersion::osaka().withEIP8141();
+	BOOST_CHECK_EQUAL(GasMeter::runGas(Instruction::APPROVE, version), GasMeter::runGas(Instruction::RETURN, version));
+
+	// Operands bottom-up: scope, then length and offset on top. RETURN ignores the scope operand
+	// left at the bottom of the stack, so it can be metered with the identical sequence.
+	std::vector<u256> const operands{u256(3), u256(64), u256(128)};
+	GasMeter::GasConsumption const reference = instructionGas(operands, Instruction::RETURN, version);
+	GasMeter::GasConsumption const gas = instructionGas(operands, Instruction::APPROVE, version);
+	BOOST_REQUIRE(!reference.isInfinite);
+	BOOST_CHECK(!gas.isInfinite);
+	BOOST_CHECK_EQUAL(gas.value, reference.value);
+}
+
+BOOST_AUTO_TEST_CASE(gas_reporting_opcodes_are_not_deterministic)
+{
+	// TXPARAM reports the current frame's state_gas_left (param 0x0C) and FRAMEPARAM reports
+	// gas_used (params 0x0A/0x0B), which a cross-frame state-gas refill can still reduce for an
+	// already completed frame. Both therefore depend on preceding operations and must not be
+	// moved or common-subexpression-eliminated, like BALANCE.
+	for (auto instruction: {Instruction::TXPARAM, Instruction::FRAMEPARAM})
+	{
+		BOOST_CHECK(!SemanticInformation::isDeterministic(AssemblyItem(instruction)));
+		BOOST_CHECK(!SemanticInformation::movable(instruction));
+		BOOST_CHECK(SemanticInformation::otherState(instruction) == SemanticInformation::Read);
+	}
+}
+
+BOOST_AUTO_TEST_CASE(payload_readers_are_deterministic)
+{
+	// Frame data and signature entries are fixed for the whole transaction, so reading them is
+	// deterministic, exactly like reading calldata.
+	for (auto instruction: {
+		Instruction::FRAMEDATALOAD,
+		Instruction::FRAMEDATACOPY,
+		Instruction::SIGPARAM,
+		Instruction::SIGDATACOPY,
+	})
+	{
+		BOOST_CHECK(SemanticInformation::isDeterministic(AssemblyItem(instruction)));
+		BOOST_CHECK(SemanticInformation::otherState(instruction) == SemanticInformation::None);
+	}
+	// The copy variants are still not movable, because they write to memory.
+	BOOST_CHECK(SemanticInformation::movable(Instruction::FRAMEDATALOAD));
+	BOOST_CHECK(SemanticInformation::movable(Instruction::SIGPARAM));
+	BOOST_CHECK(!SemanticInformation::movable(Instruction::FRAMEDATACOPY));
+	BOOST_CHECK(!SemanticInformation::movable(Instruction::SIGDATACOPY));
 }
 
 BOOST_AUTO_TEST_CASE(approve_terminates_control_flow)
@@ -196,6 +295,8 @@ BOOST_AUTO_TEST_CASE(read_opcodes_do_not_terminate)
 		Instruction::FRAMEDATALOAD,
 		Instruction::FRAMEDATACOPY,
 		Instruction::FRAMEPARAM,
+		Instruction::SIGPARAM,
+		Instruction::SIGDATACOPY,
 	})
 	{
 		BOOST_CHECK(!SemanticInformation::terminatesControlFlow(inst));
@@ -206,11 +307,13 @@ BOOST_AUTO_TEST_CASE(read_opcodes_do_not_terminate)
 BOOST_AUTO_TEST_CASE(memory_effects)
 {
 	BOOST_CHECK(SemanticInformation::memory(Instruction::FRAMEDATACOPY) == SemanticInformation::Write);
+	BOOST_CHECK(SemanticInformation::memory(Instruction::SIGDATACOPY) == SemanticInformation::Write);
 	BOOST_CHECK(SemanticInformation::memory(Instruction::APPROVE) == SemanticInformation::Read);
-	// Pure reads of frame/tx context do not touch memory.
+	// Pure reads of frame/tx/signature context do not touch memory.
 	BOOST_CHECK(SemanticInformation::memory(Instruction::TXPARAM) == SemanticInformation::None);
 	BOOST_CHECK(SemanticInformation::memory(Instruction::FRAMEPARAM) == SemanticInformation::None);
 	BOOST_CHECK(SemanticInformation::memory(Instruction::FRAMEDATALOAD) == SemanticInformation::None);
+	BOOST_CHECK(SemanticInformation::memory(Instruction::SIGPARAM) == SemanticInformation::None);
 }
 
 BOOST_AUTO_TEST_CASE(approve_classified_as_state_writer)
@@ -224,6 +327,8 @@ BOOST_AUTO_TEST_CASE(view_pure_function_restrictions)
 	BOOST_CHECK(SemanticInformation::invalidInPureFunctions(Instruction::FRAMEPARAM));
 	BOOST_CHECK(SemanticInformation::invalidInPureFunctions(Instruction::FRAMEDATALOAD));
 	BOOST_CHECK(SemanticInformation::invalidInPureFunctions(Instruction::FRAMEDATACOPY));
+	BOOST_CHECK(SemanticInformation::invalidInPureFunctions(Instruction::SIGPARAM));
+	BOOST_CHECK(SemanticInformation::invalidInPureFunctions(Instruction::SIGDATACOPY));
 	BOOST_CHECK(SemanticInformation::invalidInViewFunctions(Instruction::APPROVE));
 }
 

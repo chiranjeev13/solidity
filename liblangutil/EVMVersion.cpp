@@ -69,6 +69,8 @@ bool EVMVersion::hasOpcode(Instruction _opcode, std::optional<uint8_t> _eofVersi
 	case Instruction::FRAMEDATALOAD:
 	case Instruction::FRAMEDATACOPY:
 	case Instruction::FRAMEPARAM:
+	case Instruction::SIGPARAM:
+	case Instruction::SIGDATACOPY:
 		return hasEIP8141Opcodes();
 	// Instructions below are deprecated in EOF
 	case Instruction::CALL:
