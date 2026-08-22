@@ -68,6 +68,8 @@ bool EVMVersion::hasOpcode(Instruction _opcode) const
 	case Instruction::FRAMEDATALOAD:
 	case Instruction::FRAMEDATACOPY:
 	case Instruction::FRAMEPARAM:
+	case Instruction::SIGPARAM:
+	case Instruction::SIGDATACOPY:
 		return hasEIP8141Opcodes();
 	default:
 		return true;

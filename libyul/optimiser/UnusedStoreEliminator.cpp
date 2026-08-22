@@ -166,7 +166,9 @@ void UnusedStoreEliminator::visit(Statement const& _statement)
 		*instruction == Instruction::MSTORE ||
 		*instruction == Instruction::MSTORE8 ||
 		*instruction == Instruction::MCOPY ||
-		*instruction == Instruction::RETURNDATACOPY;
+		*instruction == Instruction::RETURNDATACOPY ||
+		*instruction == Instruction::FRAMEDATACOPY ||
+		*instruction == Instruction::SIGDATACOPY;
 	bool const isBlacklisted =
 		// Removing MCOPY is complicated because it's not just a store but also a load.
 		*instruction == Instruction::MCOPY ||
@@ -174,7 +176,12 @@ void UnusedStoreEliminator::visit(Statement const& _statement)
 		// That's because we always immediately ABI-decode the result and only if we can optimize out that decoding, `returndatacopy()` becomes truly unused.
 		// Removing it is also hard in a general case because it's not side-effect free - it reverts on out-of-bounds access and we have to preserve that revert.
 		// Simple approaches like relying on the size being equal to `returndatasize()` are error-prone, because they have to account for the variable storing the size going stale.
-		*instruction == Instruction::RETURNDATACOPY;
+		*instruction == Instruction::RETURNDATACOPY ||
+		// EIP-8141: an out-of-bounds frame or signature index halts execution exceptionally,
+		// as does a signature entry whose scheme is not ARBITRARY, so unlike calldatacopy
+		// these are not guaranteed to succeed and must never be removed.
+		*instruction == Instruction::FRAMEDATACOPY ||
+		*instruction == Instruction::SIGDATACOPY;
 	bool const isSemanticCandidateForRemoval =
 		SemanticInformation::otherState(*instruction) != SemanticInformation::Write && (
 			SemanticInformation::storage(*instruction) == SemanticInformation::Write ||

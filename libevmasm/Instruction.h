@@ -189,7 +189,9 @@ enum class Instruction: uint8_t
 	TXPARAM = 0xb0,           ///< EIP-8141: get transaction parameter (param → value)
 	FRAMEDATALOAD = 0xb1,     ///< EIP-8141: load data from call frame (offset, frameIndex → data)
 	FRAMEDATACOPY = 0xb2,     ///< EIP-8141: copy frame data to memory (memOffset, dataOffset, length, frameIndex)
-	FRAMEPARAM = 0xb3,        ///< EIP-8141: get frame parameter (param, frameIndex → value)
+	FRAMEPARAM = 0xb3,        ///< EIP-8141: get frame parameter (frameIndex, param → value)
+	SIGPARAM = 0xb4,          ///< EIP-8141: get signature parameter (signatureIndex, param → value)
+	SIGDATACOPY = 0xb5,       ///< EIP-8141: copy signature data to memory (memOffset, dataOffset, length, signatureIndex)
 
 	CREATE = 0xf0,            ///< create a new account with associated code
 	CALL,                     ///< message-call into an account
